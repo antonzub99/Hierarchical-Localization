@@ -231,7 +231,9 @@ def main(conf: Dict,
          as_half: bool = True,
          image_list: Optional[Union[Path, List[str]]] = None,
          feature_path: Optional[Path] = None,
-         overwrite: bool = False) -> Path:
+         overwrite: bool = False,
+         mask_dir: Optional[Path] = None,
+        ) -> Path:
     logger.info('Extracting local features with configuration:'
                 f'\n{pprint.pformat(conf)}')
 
@@ -262,8 +264,19 @@ def main(conf: Dict,
             size = np.array(data['image'].shape[-2:][::-1])
             scales = (original_size / size).astype(np.float32)
             pred['keypoints'] = (pred['keypoints'] + .5) * scales[None] - .5
+            
             if 'scales' in pred:
                 pred['scales'] *= scales.mean()
+            
+            if mask_dir is not None:
+                mask_name = name.split(".")[0]                
+                mask = cv2.imread(str(mask_dir / mask_name) + '.png')[:, :, 0]
+
+                valid_keypoint = mask[pred['keypoints'][:, 1].astype('int'), pred['keypoints'][:, 0].astype('int')]
+                pred['keypoints'] = pred['keypoints'][valid_keypoint > 0]
+                pred['descriptors'] = pred['descriptors'][:, valid_keypoint > 0]
+                pred['scores'] = pred['scores'][valid_keypoint > 0]
+            
             # add keypoint uncertainties scaled to the original resolution
             uncertainty = getattr(model, 'detection_noise', 1) * scales.mean()
 
